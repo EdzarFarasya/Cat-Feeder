@@ -1,0 +1,248 @@
+#define STEPPER_PIN_1 13
+#define STEPPER_PIN_2 12
+#define STEPPER_PIN_3 11
+#define STEPPER_PIN_4 10
+int step_number = 0;
+unsigned long datastore = 0;
+
+void Edzar(){
+  for (int a = 0; a < 2000; a++){
+    OneStep(true);
+    delay(1);
+  }
+  digitalWrite(STEPPER_PIN_1, LOW);
+  digitalWrite(STEPPER_PIN_2, LOW);
+  digitalWrite(STEPPER_PIN_3, LOW);
+  digitalWrite(STEPPER_PIN_4, LOW);
+}
+
+void OneStep(bool dir){
+  if(dir){
+    switch(step_number){
+      case 0:
+        digitalWrite(STEPPER_PIN_1, HIGH);
+        digitalWrite(STEPPER_PIN_2, LOW);
+        digitalWrite(STEPPER_PIN_3, LOW);
+        digitalWrite(STEPPER_PIN_4, LOW);
+        break;
+      case 1:
+        digitalWrite(STEPPER_PIN_1, LOW);
+        digitalWrite(STEPPER_PIN_2, HIGH);
+        digitalWrite(STEPPER_PIN_3, LOW);
+        digitalWrite(STEPPER_PIN_4, LOW);
+        break;
+      case 2:
+        digitalWrite(STEPPER_PIN_1, LOW);
+        digitalWrite(STEPPER_PIN_2, LOW);
+        digitalWrite(STEPPER_PIN_3, HIGH);
+        digitalWrite(STEPPER_PIN_4, LOW);
+        break;
+      case 3:
+        digitalWrite(STEPPER_PIN_1, LOW);
+        digitalWrite(STEPPER_PIN_2, LOW);
+        digitalWrite(STEPPER_PIN_3, LOW);
+        digitalWrite(STEPPER_PIN_4, HIGH);
+        break;
+    } 
+  } else {
+    switch(step_number){
+      case 0:
+        digitalWrite(STEPPER_PIN_1, LOW);
+        digitalWrite(STEPPER_PIN_2, LOW);
+        digitalWrite(STEPPER_PIN_3, LOW);
+        digitalWrite(STEPPER_PIN_4, HIGH);
+        break;
+      case 1:
+        digitalWrite(STEPPER_PIN_1, LOW);
+        digitalWrite(STEPPER_PIN_2, LOW);
+        digitalWrite(STEPPER_PIN_3, HIGH);
+        digitalWrite(STEPPER_PIN_4, LOW);
+        break;
+      case 2:
+        digitalWrite(STEPPER_PIN_1, LOW);
+        digitalWrite(STEPPER_PIN_2, HIGH);
+        digitalWrite(STEPPER_PIN_3, LOW);
+        digitalWrite(STEPPER_PIN_4, LOW);
+        break;
+      case 3:
+        digitalWrite(STEPPER_PIN_1, HIGH);
+        digitalWrite(STEPPER_PIN_2, LOW);
+        digitalWrite(STEPPER_PIN_3, LOW);
+        digitalWrite(STEPPER_PIN_4, LOW);
+        break;
+    } 
+  }
+  step_number++;
+  if(step_number > 3){
+    step_number = 0;
+  }
+}
+
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+#include <Keypad.h>
+
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+const byte ROWS = 4; // Four rows
+const byte COLS = 4; // Four columns
+
+// Define the Keymap
+char keys[ROWS][COLS] = {
+  {'1', '2', '3', 'A'},
+  {'4', '5', '6', 'B'},
+  {'7', '8', '9', 'C'},
+  {'*', '0', '#', 'D'}
+};
+
+// Connect keypad ROW0, ROW1, ROW2, and ROW3 to these Arduino pins.
+byte rowPins[ROWS] = {7, 6, 5, 4};
+
+// Connect keypad COL0, COL1, COL2, and COL3 to these Arduino pins.
+byte colPins[COLS] = {3, 2, 9, 8};
+
+// Create the Keypad
+Keypad kpd = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+
+char key;
+int feedingHours = 0;
+int feedingMinutes = 0;
+int feedingSeconds = 0;
+int portions = 0;
+unsigned long feedingTimeInMillis = 0;
+boolean feedingTimeSet = false;
+boolean feed = false;
+
+void setup() {
+  lcd.clear();
+  lcd.init();
+  lcd.backlight();
+  Serial.begin(9600);
+
+  pinMode(STEPPER_PIN_1, OUTPUT);
+  pinMode(STEPPER_PIN_2, OUTPUT);
+  pinMode(STEPPER_PIN_3, OUTPUT);
+  pinMode(STEPPER_PIN_4, OUTPUT);
+}
+
+void loop() {
+  lcd.setCursor(0, 0);
+  lcd.print("Time: ");
+
+  if (feedingTimeSet) {
+    unsigned long currentTime = millis();
+    if (currentTime >= feedingTimeInMillis) {
+      if (!feed) {
+        feed = true;
+        lcd.clear();
+        lcd.print("Feeding Time!");
+        eat();
+        resetFeedingTime();
+      }
+    } else {
+      unsigned long remainingTime = feedingTimeInMillis - currentTime;
+      unsigned long remainingHours = (remainingTime / 1440000) % 24;
+      unsigned long remainingMinutes = (remainingTime / 24000) % 60;
+      unsigned long remainingSeconds = (remainingTime / 400) % 60;
+      
+      lcd.setCursor(6, 0);
+      if (remainingHours < 10) lcd.print("0");
+      lcd.print(remainingHours);
+      lcd.print(":");
+      if (remainingMinutes < 10) lcd.print("0");
+      lcd.print(remainingMinutes);
+      lcd.print(":");
+      if (remainingSeconds < 10) lcd.print("0");
+      lcd.print(remainingSeconds);
+    }
+  } else {
+    lcd.setCursor(6, 0);
+    lcd.print("Not set      ");
+  }
+
+  lcd.setCursor(0, 1);
+  lcd.print("Portions: ");
+  lcd.print(portions);
+
+  key = kpd.getKey();
+  if (key == '*') {
+    lcd.clear();
+    setFeedingTime();
+  }
+}
+
+void eat() {
+  for (int i = 0; i < portions; i++) {
+    Edzar();
+  }
+  feed = false;
+}
+
+void setFeedingTime() {
+  int i = 0;
+  int j = 0;
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Set Time (H:MM:SS|P)");
+  delay(1000);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("H:MM:SS|P");
+  lcd.setCursor(0, 1);
+  
+  char buffer[5] = {0}; // Changed to 5 to accommodate H:MM:SS format
+  char portionChar[1] = {0};
+  
+  while (i < 5 || portionChar[0] == 0) {
+    key = kpd.getKey();
+
+    if (key != NO_KEY && key != '#') {
+      if (i < 5) {
+        lcd.setCursor(j, 1);
+        lcd.print(key);
+        buffer[i] = key;
+        i++;
+        j++;
+
+        if (j == 1) {
+          lcd.print(":");
+          j++;
+        } else if (j == 4) {
+          lcd.print(":");
+          j++;
+        } else if (j == 7) {
+          lcd.print("|");
+          j++;
+        }
+      } else {
+        lcd.setCursor(j, 1);
+        lcd.print(key);
+        portionChar[0] = key;
+        j++;
+      }
+
+      delay(500);
+    }
+
+    if (key == '#') {
+      lcd.clear();
+      return;
+    }
+  }
+
+  feedingHours = buffer[0] - '0';
+  feedingMinutes = (buffer[1] - '0') * 10 + (buffer[2] - '0');
+  feedingSeconds = (buffer[3] - '0') * 10 + (buffer[4] - '0');
+  portions = portionChar[0] - '0';
+
+  feedingTimeInMillis = millis() + (feedingHours * 1440000UL) + (feedingMinutes * 24000UL) + (feedingSeconds * 400UL);
+  feedingTimeSet = true;
+  feed = false;
+  lcd.clear();
+}
+
+void resetFeedingTime() {
+  feedingTimeInMillis = millis() + (feedingHours * 1440000UL) + (feedingMinutes * 24000UL) + (feedingSeconds * 400UL);
+  feed = false;
+  feedingTimeSet = true;
+}
